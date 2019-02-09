@@ -63,11 +63,13 @@ var (
 	decryptFlag  bool
 	cipherFlag   string
 	passwordFlag string
+	base64Flag   bool
 )
 
 func init() {
 	flag.BoolVar(&listFlag, "list", false, fmt.Sprintf("%-8s List supported algorithms", ""))
 	flag.BoolVar(&decryptFlag, "d", false, fmt.Sprintf("%-8s Decrypt", ""))
+	flag.BoolVar(&base64Flag, "b", false, fmt.Sprintf("%-8s Base64 encode output", ""))
 
 	flag.StringVar(&cipherFlag, "cipher", "", fmt.Sprintf("%-8s Specify cipher - default: platform depended", "string"))
 	flag.StringVar(&passwordFlag, "p", "", fmt.Sprintf("%-8s Specify the password - default: prompt for password", "string"))
