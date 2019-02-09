@@ -45,6 +45,8 @@ import (
 	"github.com/minio/sio"
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/crypto/ssh/terminal"
+	"encoding/base64"
+	"io/ioutil"
 )
 
 const (
@@ -114,9 +116,38 @@ func main() {
 		printCiphers()
 	}
 
-	ciphersuite := cipherSuites()
 	in, out := parseIOArgs()
-	key := deriveKey(out, in)
+	ciphersuite := cipherSuites()
+
+	// TODO: make sure that doing this doesn't break the -p option!
+	var password = []byte(passwordFlag)
+	password = readPassword(os.Stderr)
+
+
+	if base64Flag {
+		if decryptFlag {
+
+			tmpfile, _ := ioutil.TempFile("", "b64")
+			decoder := base64.NewDecoder(base64.StdEncoding, in)
+
+			io.CopyBuffer(tmpfile, decoder, nil)
+			tmpFileName := tmpfile.Name()
+
+			tmpfile.Sync()
+			tmpfile.Close()
+
+			tmpfileAsInput, _ := os.Open(tmpFileName)
+			//out.WriteString("--")
+			//io.CopyBuffer(os.Stdout, tmpfileAsInput, nil)
+			//out.WriteString("--")
+			//
+			//tmpfileAsInput.Seek(0, 0)
+
+			in = tmpfileAsInput
+		}
+	}
+
+	key := deriveKey(password, out, in)
 
 	cfg := sio.Config{Key: key, CipherSuites: ciphersuite}
 	if decryptFlag {
@@ -226,15 +257,14 @@ func readPassword(src *os.File) []byte {
 	return password
 }
 
-func deriveKey(dst, src *os.File) []byte {
-	password, salt := []byte{}, make([]byte, 32)
-	if passwordFlag != "" {
-		password = []byte(passwordFlag)
-	} else if src == os.Stdin {
-		password = readPassword(os.Stderr)
-	} else {
-		password = readPassword(os.Stdin)
-	}
+func deriveKey(password []byte, dst, src *os.File) []byte {
+	salt := make([]byte, 32)
+	//if passwordFlag != "" {
+	//	password = []byte(passwordFlag)
+	//} else if src == os.Stdin {
+	//	password = readPassword(os.Stderr)
+	//} else {
+	//}
 	if decryptFlag {
 		if _, err := io.ReadFull(src, salt); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to read salt from '%s'\n", src.Name())
