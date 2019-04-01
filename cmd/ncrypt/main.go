@@ -125,59 +125,26 @@ func main() {
 	var password = []byte(passwordFlag)
 	password = readPassword(os.Stderr)
 
-	if base64Flag && decryptFlag {
-
-		decoder := base64.NewDecoder(base64.StdEncoding, in)
-
-		in = decoder
-		fmt.Fprintf(os.Stderr, "Decoder is now set to input.\n")
-		// os.Stdout.Write([]byte("\n\n------\n"))
-
-		// io.Copy(out, decoder)
-
-		// os.Stdout.Write([]byte("\n\n------\n"))
-		// if _, err := sio.Decrypt(out, decoder, cfg); err != nil {
-		// 	fmt.Fprintf(os.Stderr, "Failed to decrypt: '%s'\n", "nothing")
-		// 	exit(codeError)
-		// }
-		// sio.Decrypt(out, pr, cfg)
-		// io.Copy(out, pr)
-		// fmt.Printf("finished decryption\n")
-		// decrypt(out, pr, cfg)
+	if base64Flag {
+		if decryptFlag {
+			decoder := base64.NewDecoder(base64.StdEncoding, in)
+			in = decoder
+		} else {
+			encoder := base64.NewEncoder(base64.StdEncoding, out)
+			out = encoder
+		}
 	}
 
 	key := deriveKey(password, out, in)
 
-	/**
-	salt := make([]byte, 32)
-	nothing := make([]byte, 32)
-	key, _ := scrypt.Key(nothing, salt, 32768, 16, 1, 32)
-	**/
-
 	cfg := sio.Config{Key: key, CipherSuites: ciphersuite}
 	if decryptFlag {
-		if base64Flag {
-
-			// decoder := base64.NewDecoder(base64.StdEncoding, in)
-
-			// os.Stdout.Write([]byte("\n\n------\n"))
-
-			// io.Copy(out, decoder)
-
-			// os.Stdout.Write([]byte("\n\n------\n"))
-			// if _, err := sio.Decrypt(out, decoder, cfg); err != nil {
-			// 	fmt.Fprintf(os.Stderr, "Failed to decrypt: '%s'\n", "nothing")
-			// 	exit(codeError)
-			// }
-			// sio.Decrypt(out, pr, cfg)
-			// io.Copy(out, pr)
-			// fmt.Printf("finished decryption\n")
-			decrypt(out, in, cfg)
-		} else {
-			decrypt(out, in, cfg)
-		}
+		decrypt(out, in, cfg)
 	} else {
 		encrypt(out, in, cfg)
+		if base64Flag {
+			out.(io.WriteCloser).Close()
+		}
 	}
 	return
 }
