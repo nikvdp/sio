@@ -42,11 +42,11 @@ import (
 	"sort"
 	"syscall"
 
+	"encoding/base64"
+
 	"github.com/minio/sio"
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/crypto/ssh/terminal"
-	"encoding/base64"
-	"io/ioutil"
 )
 
 const (
@@ -116,42 +116,66 @@ func main() {
 		printCiphers()
 	}
 
-	in, out := parseIOArgs()
+	var in io.Reader
+	var out io.Writer
+	in, out = parseIOArgs()
 	ciphersuite := cipherSuites()
 
 	// TODO: make sure that doing this doesn't break the -p option!
 	var password = []byte(passwordFlag)
 	password = readPassword(os.Stderr)
 
+	if base64Flag && decryptFlag {
 
-	if base64Flag {
-		if decryptFlag {
+		decoder := base64.NewDecoder(base64.StdEncoding, in)
 
-			tmpfile, _ := ioutil.TempFile("", "b64")
-			decoder := base64.NewDecoder(base64.StdEncoding, in)
+		in = decoder
+		fmt.Fprintf(os.Stderr, "Decoder is now set to input.\n")
+		// os.Stdout.Write([]byte("\n\n------\n"))
 
-			io.CopyBuffer(tmpfile, decoder, nil)
-			tmpFileName := tmpfile.Name()
+		// io.Copy(out, decoder)
 
-			tmpfile.Sync()
-			tmpfile.Close()
-
-			tmpfileAsInput, _ := os.Open(tmpFileName)
-			//out.WriteString("--")
-			//io.CopyBuffer(os.Stdout, tmpfileAsInput, nil)
-			//out.WriteString("--")
-			//
-			//tmpfileAsInput.Seek(0, 0)
-
-			in = tmpfileAsInput
-		}
+		// os.Stdout.Write([]byte("\n\n------\n"))
+		// if _, err := sio.Decrypt(out, decoder, cfg); err != nil {
+		// 	fmt.Fprintf(os.Stderr, "Failed to decrypt: '%s'\n", "nothing")
+		// 	exit(codeError)
+		// }
+		// sio.Decrypt(out, pr, cfg)
+		// io.Copy(out, pr)
+		// fmt.Printf("finished decryption\n")
+		// decrypt(out, pr, cfg)
 	}
 
 	key := deriveKey(password, out, in)
 
+	/**
+	salt := make([]byte, 32)
+	nothing := make([]byte, 32)
+	key, _ := scrypt.Key(nothing, salt, 32768, 16, 1, 32)
+	**/
+
 	cfg := sio.Config{Key: key, CipherSuites: ciphersuite}
 	if decryptFlag {
-		decrypt(out, in, cfg)
+		if base64Flag {
+
+			// decoder := base64.NewDecoder(base64.StdEncoding, in)
+
+			// os.Stdout.Write([]byte("\n\n------\n"))
+
+			// io.Copy(out, decoder)
+
+			// os.Stdout.Write([]byte("\n\n------\n"))
+			// if _, err := sio.Decrypt(out, decoder, cfg); err != nil {
+			// 	fmt.Fprintf(os.Stderr, "Failed to decrypt: '%s'\n", "nothing")
+			// 	exit(codeError)
+			// }
+			// sio.Decrypt(out, pr, cfg)
+			// io.Copy(out, pr)
+			// fmt.Printf("finished decryption\n")
+			decrypt(out, in, cfg)
+		} else {
+			decrypt(out, in, cfg)
+		}
 	} else {
 		encrypt(out, in, cfg)
 	}
@@ -257,7 +281,7 @@ func readPassword(src *os.File) []byte {
 	return password
 }
 
-func deriveKey(password []byte, dst, src *os.File) []byte {
+func deriveKey(password []byte, dst io.Writer, src io.Reader) []byte {
 	salt := make([]byte, 32)
 	//if passwordFlag != "" {
 	//	password = []byte(passwordFlag)
@@ -267,16 +291,16 @@ func deriveKey(password []byte, dst, src *os.File) []byte {
 	//}
 	if decryptFlag {
 		if _, err := io.ReadFull(src, salt); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to read salt from '%s'\n", src.Name())
+			fmt.Fprintf(os.Stderr, "Failed to read salt from '%s'\n", src.(*os.File).Name())
 			exit(codeError)
 		}
 	} else {
 		if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to generate random salt '%s'\n", src.Name())
+			fmt.Fprintf(os.Stderr, "Failed to generate random salt '%s'\n", src.(*os.File).Name())
 			exit(codeError)
 		}
 		if _, err := dst.Write(salt); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to write salt to '%s'\n", dst.Name())
+			fmt.Fprintf(os.Stderr, "Failed to write salt to '%s'\n", dst.(*os.File).Name())
 			exit(codeError)
 		}
 	}
@@ -288,16 +312,16 @@ func deriveKey(password []byte, dst, src *os.File) []byte {
 	return key
 }
 
-func encrypt(dst, src *os.File, cfg sio.Config) {
+func encrypt(dst io.Writer, src io.Reader, cfg sio.Config) {
 	if _, err := sio.Encrypt(dst, src, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to encrypt: '%s'\n", src.Name())
+		fmt.Fprintf(os.Stderr, "Failed to encrypt")
 		exit(codeError)
 	}
 }
 
-func decrypt(dst, src *os.File, cfg sio.Config) {
+func decrypt(dst io.Writer, src io.Reader, cfg sio.Config) {
 	if _, err := sio.Decrypt(dst, src, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to decrypt: '%s'\n", src.Name())
+		fmt.Fprintf(os.Stderr, "Failed to decrypt")
 		exit(codeError)
 	}
 }
