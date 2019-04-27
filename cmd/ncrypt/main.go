@@ -121,9 +121,12 @@ func main() {
 	in, out = parseIOArgs()
 	ciphersuite := cipherSuites()
 
-	// TODO: make sure that doing this doesn't break the -p option!
 	var password = []byte(passwordFlag)
-	password = readPassword(os.Stderr)
+	if passwordFlag != "" {
+		password = []byte(passwordFlag)
+	} else {
+		password = readPassword(os.Stderr)
+	}
 
 	if base64Flag {
 		if decryptFlag {
@@ -250,12 +253,6 @@ func readPassword(src *os.File) []byte {
 
 func deriveKey(password []byte, dst io.Writer, src io.Reader) []byte {
 	salt := make([]byte, 32)
-	//if passwordFlag != "" {
-	//	password = []byte(passwordFlag)
-	//} else if src == os.Stdin {
-	//	password = readPassword(os.Stderr)
-	//} else {
-	//}
 	if decryptFlag {
 		if _, err := io.ReadFull(src, salt); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to read salt from '%s'\n", src.(*os.File).Name())
