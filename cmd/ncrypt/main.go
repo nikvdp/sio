@@ -19,10 +19,10 @@
 //
 // Usage: ncrypt [FLAGS] [ARGUMENTS...]
 //
-//    -cipher string   Specify cipher - default: platform depended
-//    -d               Decrypt
-//    -list            List supported algorithms
-//    -p      string   Specify the password - default: prompt for password
+//	-cipher string   Specify cipher - default: platform depended
+//	-d               Decrypt
+//	-list            List supported algorithms
+//	-p      string   Specify the password - default: prompt for password
 //
 // Examples:
 //
@@ -32,6 +32,7 @@
 package main // import "github.com/nikvdp/sio/cmd/ncrypt"
 
 import (
+	"bytes"
 	"crypto/rand"
 	"flag"
 	"fmt"
@@ -66,6 +67,7 @@ var (
 	cipherFlag   string
 	passwordFlag string
 	base64Flag   bool
+	wrapFlag     int
 )
 
 func init() {
@@ -75,6 +77,7 @@ func init() {
 
 	flag.StringVar(&cipherFlag, "cipher", "", fmt.Sprintf("%-8s Specify cipher - default: platform depended", "string"))
 	flag.StringVar(&passwordFlag, "p", "", fmt.Sprintf("%-8s Specify the password - default: prompt for password", "string"))
+	flag.IntVar(&wrapFlag, "w", 64, fmt.Sprintf("%-8s Base64 line wrap width (0 = no wrapping) - default: 64", "int"))
 
 	flag.Usage = func() {
 		printFlag := func(f *flag.Flag) {
@@ -110,6 +113,77 @@ var supportedCiphers = map[string]string{
 	"C20P1305": "ChaCha20 Poly1305",
 }
 
+// base64LineWrapper wraps base64 output at specified column width
+type base64LineWrapper struct {
+	writer  io.Writer
+	wrapAt  int
+	buffer  *bytes.Buffer
+	linePos int
+}
+
+func (w *base64LineWrapper) Write(p []byte) (n int, err error) {
+	n = len(p)
+	w.buffer.Write(p)
+
+	// Write complete lines
+	for w.buffer.Len() >= w.wrapAt-w.linePos {
+		remaining := w.wrapAt - w.linePos
+		line := w.buffer.Next(remaining)
+		if _, err := w.writer.Write(line); err != nil {
+			return 0, err
+		}
+		if _, err := w.writer.Write([]byte("\n")); err != nil {
+			return 0, err
+		}
+		w.linePos = 0
+	}
+
+	// Write any partial line
+	if w.buffer.Len() > 0 && w.linePos == 0 {
+		partial := w.buffer.Bytes()
+		if _, err := w.writer.Write(partial); err != nil {
+			return 0, err
+		}
+		w.linePos = len(partial)
+		w.buffer.Reset()
+	}
+
+	return n, nil
+}
+
+func (w *base64LineWrapper) Flush() error {
+	if w.buffer.Len() > 0 {
+		if _, err := w.writer.Write(w.buffer.Bytes()); err != nil {
+			return err
+		}
+		w.buffer.Reset()
+	}
+	if w.linePos > 0 {
+		if _, err := w.writer.Write([]byte("\n")); err != nil {
+			return err
+		}
+		w.linePos = 0
+	}
+	return nil
+}
+
+// wrappingEncoder combines the base64 encoder with line wrapper
+type wrappingEncoder struct {
+	encoder io.WriteCloser
+	wrapper *base64LineWrapper
+}
+
+func (w *wrappingEncoder) Write(p []byte) (n int, err error) {
+	return w.encoder.Write(p)
+}
+
+func (w *wrappingEncoder) Close() error {
+	if err := w.encoder.Close(); err != nil {
+		return err
+	}
+	return w.wrapper.Flush()
+}
+
 func main() {
 	flag.Parse()
 	if listFlag {
@@ -130,11 +204,24 @@ func main() {
 
 	if base64Flag {
 		if decryptFlag {
+			// Decoder handles whitespace automatically
 			decoder := base64.NewDecoder(base64.StdEncoding, in)
 			in = decoder
 		} else {
-			encoder := base64.NewEncoder(base64.StdEncoding, out)
-			out = encoder
+			if wrapFlag > 0 {
+				// Use our wrapping encoder
+				wrapper := &base64LineWrapper{
+					writer: out,
+					wrapAt: wrapFlag,
+					buffer: &bytes.Buffer{},
+				}
+				encoder := base64.NewEncoder(base64.StdEncoding, wrapper)
+				out = &wrappingEncoder{encoder: encoder, wrapper: wrapper}
+			} else {
+				// No wrapping - single line output
+				encoder := base64.NewEncoder(base64.StdEncoding, out)
+				out = encoder
+			}
 		}
 	}
 
@@ -146,7 +233,9 @@ func main() {
 	} else {
 		encrypt(out, in, cfg)
 		if base64Flag {
-			out.(io.WriteCloser).Close()
+			if closer, ok := out.(io.WriteCloser); ok {
+				closer.Close()
+			}
 		}
 	}
 	return
