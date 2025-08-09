@@ -47,7 +47,7 @@ import (
 
 	"github.com/nikvdp/sio"
 	"golang.org/x/crypto/scrypt"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 const (
@@ -102,7 +102,7 @@ func init() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		_ = <-sigChan
+		<-sigChan
 		cleanChan <- codeCancel // try to exit gracefully
 		runtime.Goexit()
 	}()
@@ -238,7 +238,6 @@ func main() {
 			}
 		}
 	}
-	return
 }
 
 func exit(code int) {
@@ -289,7 +288,7 @@ func parseIOArgs() (*os.File, *os.File) {
 			fmt.Fprintf(os.Stderr, "Failed to open '%s': %v\n", args[0], err)
 			exit(codeError)
 		}
-		cleanFn = append(cleanFn, func(code int) { in.Close() })
+		cleanFn = append(cleanFn, func(_ int) { in.Close() })
 		return in, os.Stdout
 	case 2:
 		in, err := os.Open(args[0])
@@ -313,21 +312,21 @@ func parseIOArgs() (*os.File, *os.File) {
 }
 
 func readPassword(src *os.File) []byte {
-	state, err := terminal.GetState(int(src.Fd()))
+	state, err := term.GetState(int(src.Fd()))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to read password:", err)
 		exit(codeError)
 	}
 	cleanFn = append(cleanFn, func(code int) {
-		stat, _ := terminal.GetState(int(src.Fd()))
+		stat, _ := term.GetState(int(src.Fd()))
 		if code == codeCancel && stat != nil && *stat != *state {
 			fmt.Fprintln(src, "\nFailed to read password: Interrupted")
 		}
-		terminal.Restore(int(src.Fd()), state)
+		term.Restore(int(src.Fd()), state)
 	})
 
 	fmt.Fprint(src, "Enter password:")
-	password, err := terminal.ReadPassword(int(src.Fd()))
+	password, err := term.ReadPassword(int(src.Fd()))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to read password:", err)
 		exit(codeError)
