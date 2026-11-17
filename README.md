@@ -61,6 +61,21 @@ your command line:
 
 **Install ncrypt:** `go get -u github.com/minio/sio/cmd/ncrypt && ncrypt -h`
 
+### Install ncrypt with Nix
+
+With Nix flakes enabled, run these commands from a checkout of this repository:
+
+```sh
+nix profile install .#ncrypt
+ncrypt -h
+```
+
+To run without installing, use `nix run . -- -h`. To build only, use
+`nix build .`; the executable will be at `./result/bin/ncrypt`.
+
+The flake supports x86_64 and aarch64 Linux, plus Apple Silicon macOS.
+Nixpkgs and Go dependencies are pinned by `flake.lock` and the package's vendor hash.
+
 ## Performance
 
 Cipher            |   8 KB   |   64 KB   |   512 KB  |  1 MB
